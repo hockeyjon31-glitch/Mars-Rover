@@ -1,10 +1,19 @@
+export type RoverVehicleType = 'lunar_lrv' | 'mars_perseverance';
+
 export type AppMode = 'drive' | 'studio';
 
 export type CameraView = 'chase' | 'cockpit' | 'free' | 'wheel';
 
 export type ArmPose = 'stowed' | 'sample' | 'scan' | 'selfie';
 
-export type RoverSkin = 'nasa_classic' | 'stealth_black' | 'ares_orange' | 'martian_dust';
+export type RoverSkin =
+  | 'nasa_classic'
+  | 'stealth_black'
+  | 'ares_orange'
+  | 'martian_dust'
+  | 'apollo_historic'
+  | 'artemis_gold'
+  | 'lunar_carbon';
 
 export interface RoverSkinConfig {
   id: RoverSkin;
@@ -41,7 +50,15 @@ export interface RoverTelemetry {
 export interface ScienceSamplePoint {
   id: string;
   name: string;
-  type: 'Hematite Spherules' | 'Silica Hydrate' | 'Basaltic Regolith' | 'Organic Carbon Candidate';
+  type:
+    | 'Hematite Spherules'
+    | 'Silica Hydrate'
+    | 'Basaltic Regolith'
+    | 'Organic Carbon Candidate'
+    | 'Anorthosite Genesis Rock'
+    | 'Orange Pyroclastic Glass'
+    | 'Vesicular Basalt Fragment'
+    | 'Impact Melt Breccia';
   position: [number, number, number];
   collected: boolean;
   discovered: boolean;

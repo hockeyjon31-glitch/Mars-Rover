@@ -6,9 +6,11 @@ import {
   RoverGameControls,
   RoverSkin,
   RoverTelemetry,
+  RoverVehicleType,
   ScienceSamplePoint,
 } from '../types';
 import { ROVER_SKINS } from './RoverModel';
+import { LUNAR_ROVER_SKINS } from './LunarRoverModel';
 import { exportRoverGLTF, exportRoverOBJ, GAME_ENGINE_CODE_TEMPLATES } from './Exporters';
 import { soundManager } from './SoundEffects';
 import * as THREE from 'three';
@@ -34,9 +36,13 @@ import {
   Activity,
   Maximize2,
   RotateCw,
+  Moon,
+  Flame,
 } from 'lucide-react';
 
 interface UIOverlayProps {
+  vehicleType: RoverVehicleType;
+  setVehicleType: (vt: RoverVehicleType) => void;
   mode: AppMode;
   setMode: (m: AppMode) => void;
   cameraView: CameraView;
@@ -62,6 +68,8 @@ interface UIOverlayProps {
 }
 
 export const UIOverlay: React.FC<UIOverlayProps> = ({
+  vehicleType,
+  setVehicleType,
   mode,
   setMode,
   cameraView,
@@ -90,7 +98,8 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
   const [activeCodeTab, setActiveCodeTab] = useState<'unity' | 'godot' | 'threejs'>('unity');
   const [copiedCode, setCopiedCode] = useState(false);
   const [exportingGltf, setExportingGltf] = useState(false);
-  const [sampleNotification, setSampleNotification] = useState<string | null>(null);
+
+  const isLunar = vehicleType === 'lunar_lrv';
 
   const toggleMute = () => {
     const next = !isMuted;
@@ -102,7 +111,8 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
     if (!roverRefOutput.current) return;
     setExportingGltf(true);
     try {
-      await exportRoverGLTF(roverRefOutput.current, true);
+      const filenamePrefix = isLunar ? 'Apollo_LunarRover_LRV' : 'Perseverance_MarsRover';
+      await exportRoverGLTF(roverRefOutput.current, true, filenamePrefix);
     } catch (err) {
       console.error('Export error:', err);
     } finally {
@@ -112,7 +122,8 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
 
   const handleExportOBJ = () => {
     if (!roverRefOutput.current) return;
-    exportRoverOBJ(roverRefOutput.current);
+    const filenamePrefix = isLunar ? 'Apollo_LunarRover_LRV' : 'Perseverance_MarsRover';
+    exportRoverOBJ(roverRefOutput.current, filenamePrefix);
   };
 
   const handleCopyCode = () => {
@@ -122,19 +133,68 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  // Get current available skins based on vehicle type
+  const availableSkins = isLunar ? LUNAR_ROVER_SKINS : ROVER_SKINS;
+
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 sm:p-5 select-none overflow-hidden font-sans">
       {/* ================= TOP NAVIGATION BAR ================= */}
-      <header id="rover-top-nav" className="pointer-events-auto flex flex-wrap items-center justify-between gap-3 w-full max-w-7xl mx-auto bg-neutral-900/85 backdrop-blur-md border border-neutral-700/60 rounded-xl px-3 py-2.5 shadow-xl text-neutral-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-orange-600 flex items-center justify-center font-bold text-white shadow-md">
-            ♂
+      <header
+        id="rover-top-nav"
+        className="pointer-events-auto flex flex-wrap items-center justify-between gap-3 w-full max-w-7xl mx-auto bg-neutral-900/90 backdrop-blur-md border border-neutral-700/60 rounded-xl px-3 py-2.5 shadow-xl text-neutral-100"
+      >
+        <div className="flex items-center gap-3">
+          {/* Planetary Mission / Vehicle Selector */}
+          <div className="flex items-center bg-neutral-950/80 p-1 rounded-lg border border-neutral-800">
+            <button
+              id="switch-mars-btn"
+              onClick={() => {
+                if (vehicleType !== 'mars_perseverance') {
+                  setVehicleType('mars_perseverance');
+                  setCurrentSkin('nasa_classic');
+                }
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                !isLunar
+                  ? 'bg-orange-600 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-orange-300" />
+              <span>Mars Perseverance</span>
+            </button>
+
+            <button
+              id="switch-lunar-btn"
+              onClick={() => {
+                if (vehicleType !== 'lunar_lrv') {
+                  setVehicleType('lunar_lrv');
+                  setCurrentSkin('apollo_historic');
+                }
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                isLunar
+                  ? 'bg-sky-600 text-white shadow-sm'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60'
+              }`}
+            >
+              <Moon className="w-3.5 h-3.5 text-sky-200" />
+              <span>Apollo 15 Lunar LRV</span>
+            </button>
           </div>
-          <div>
-            <div className="text-sm font-bold tracking-wide flex items-center gap-1.5 text-white">
-              PERSEVERANCE M-VI <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">GAME READY 3D</span>
+
+          <div className="hidden sm:block">
+            <div className="text-xs font-bold tracking-wide flex items-center gap-1.5 text-white">
+              {isLunar ? 'APOLLO 15/17 LRV' : 'PERSEVERANCE M-VI'}
+              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                isLunar ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' : 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+              }`}>
+                {isLunar ? '4WD WIRE TIRES' : '6WD ROCKER-BOGIE'}
+              </span>
             </div>
-            <div className="text-[11px] text-neutral-400">Rocker-Bogie 6WD Kinematic Vehicle</div>
+            <div className="text-[11px] text-neutral-400">
+              {isLunar ? 'T-Handle Control • High-Gain Antenna • Regolith Wire Treads' : 'Autonomous 5-DOF Arm • SuperCam Mast • Coring Drill'}
+            </div>
           </div>
         </div>
 
@@ -145,7 +205,7 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
             onClick={() => setMode('drive')}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
               mode === 'drive'
-                ? 'bg-orange-600 text-white shadow-sm'
+                ? isLunar ? 'bg-sky-600 text-white shadow-sm' : 'bg-orange-600 text-white shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
@@ -156,7 +216,7 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
             onClick={() => setMode('studio')}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
               mode === 'studio'
-                ? 'bg-orange-600 text-white shadow-sm'
+                ? isLunar ? 'bg-sky-600 text-white shadow-sm' : 'bg-orange-600 text-white shadow-sm'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
@@ -169,13 +229,13 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
           {mode === 'drive' && (
             <div className="flex items-center gap-1 bg-neutral-800/90 rounded-lg p-1 border border-neutral-700/50 text-xs">
               <span className="text-neutral-400 px-1 text-[11px] hidden xs:inline flex items-center gap-1">
-                <Video className="w-3 h-3 text-orange-400" />
+                <Video className={`w-3 h-3 ${isLunar ? 'text-sky-400' : 'text-orange-400'}`} />
                 Cam:
               </span>
               {(
                 [
                   { id: 'chase', label: 'Chase', key: '1' },
-                  { id: 'cockpit', label: 'Cockpit', key: '2' },
+                  { id: 'cockpit', label: isLunar ? 'Driver' : 'Cockpit', key: '2' },
                   { id: 'wheel', label: 'Wheel', key: '3' },
                   { id: 'free', label: 'Free', key: '4' },
                 ] as const
@@ -189,7 +249,7 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                   }}
                   className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
                     cameraView === id
-                      ? 'bg-orange-600 text-white shadow-sm font-semibold'
+                      ? isLunar ? 'bg-sky-600 text-white shadow-sm font-semibold' : 'bg-orange-600 text-white shadow-sm font-semibold'
                       : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700/50'
                   }`}
                   title={`${label} View [Press ${key} or C to cycle]`}
@@ -207,7 +267,11 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
             title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
             className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700/60 text-neutral-300 transition-colors"
           >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-orange-400" />}
+            {isMuted ? (
+              <VolumeX className="w-4 h-4" />
+            ) : (
+              <Volume2 className={`w-4 h-4 ${isLunar ? 'text-sky-400' : 'text-orange-400'}`} />
+            )}
           </button>
 
           {/* Export 3D for Game Button */}
@@ -229,9 +293,13 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
             <Radio className="w-4 h-4 animate-pulse" />
             <span>SCIENCE WAYPOINT DETECTED</span>
           </div>
-          <div className="font-semibold text-white mt-1">{lastDiscovered.name} ({lastDiscovered.type})</div>
+          <div className="font-semibold text-white mt-1">
+            {lastDiscovered.name} ({lastDiscovered.type})
+          </div>
           <div className="text-[11px] text-neutral-400 mt-0.5">{lastDiscovered.analysisText}</div>
-          <div className="text-[10px] text-sky-300 mt-1 font-mono">Approach within 4m & activate Coring Drill [E] to collect sample</div>
+          <div className="text-[10px] text-sky-300 mt-1 font-mono">
+            Approach within 4m & activate Coring Tool [E] to collect sample
+          </div>
         </div>
       )}
 
@@ -239,11 +307,16 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
       <div className="flex-1 flex justify-between items-end my-2 pointer-events-none">
         {/* DRIVE MODE: Mission Instrument Cluster (Left Side) */}
         {mode === 'drive' ? (
-          <div id="drive-telemetry-hud" className="pointer-events-auto bg-neutral-900/85 backdrop-blur-md border border-neutral-700/70 rounded-xl p-3.5 shadow-2xl text-neutral-100 flex flex-col gap-3 min-w-[220px]">
+          <div
+            id="drive-telemetry-hud"
+            className="pointer-events-auto bg-neutral-900/85 backdrop-blur-md border border-neutral-700/70 rounded-xl p-3.5 shadow-2xl text-neutral-100 flex flex-col gap-3 min-w-[220px]"
+          >
             <div className="flex items-center justify-between border-b border-neutral-700/60 pb-2">
-              <span className="text-[11px] font-mono tracking-wider text-neutral-400">MISSION TELEMETRY</span>
+              <span className="text-[11px] font-mono tracking-wider text-neutral-400">
+                {isLunar ? 'LUNAR TELEMETRY (APOLLO)' : 'MISSION TELEMETRY (MARS)'}
+              </span>
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                LINK: 42.1 Kbps
+                {isLunar ? 'VHF HIGH-GAIN' : 'DSN LINK 42.1K'}
               </span>
             </div>
 
@@ -254,78 +327,107 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                   {telemetry.speedKmh.toFixed(1)}
                   <span className="text-xs font-normal text-neutral-400">km/h</span>
                 </div>
-                <div className="text-[11px] font-mono text-neutral-400">{(telemetry.speedMs).toFixed(1)} m/s ground</div>
+                <div className="text-[11px] font-mono text-neutral-400">
+                  {telemetry.speedMs.toFixed(1)} m/s ground
+                </div>
               </div>
               <div className="flex flex-col items-end">
                 <div className="text-[10px] text-neutral-400">GEAR</div>
-                <div className="text-sm font-bold font-mono px-2 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-orange-400">
+                <div className="font-mono text-lg font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60">
                   {telemetry.driveGear}
                 </div>
               </div>
             </div>
 
-            {/* Inclinometer & Heading */}
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-neutral-800/60 p-2 rounded-lg border border-neutral-700/40">
-              <div>
-                <span className="text-neutral-400 block text-[10px]">PITCH / ROLL</span>
-                <span className="text-neutral-200">{telemetry.pitchDeg.toFixed(1)}° / {telemetry.rollDeg.toFixed(1)}°</span>
+            {/* Inclinometer: Pitch & Roll */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-neutral-800/60 p-2 rounded-lg border border-neutral-700/50">
+                <div className="text-[10px] text-neutral-400 mb-0.5">PITCH</div>
+                <div className="font-mono font-semibold flex items-baseline justify-between">
+                  <span>{telemetry.pitchDeg > 0 ? `+${telemetry.pitchDeg}°` : `${telemetry.pitchDeg}°`}</span>
+                  <span className={`text-[10px] ${Math.abs(telemetry.pitchDeg) > 20 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {Math.abs(telemetry.pitchDeg) > 20 ? 'STEEP' : 'NOMINAL'}
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="text-neutral-400 block text-[10px]">AZIMUTH</span>
-                <span className="text-neutral-200">{telemetry.headingDeg.toFixed(0)}° HEADING</span>
+
+              <div className="bg-neutral-800/60 p-2 rounded-lg border border-neutral-700/50">
+                <div className="text-[10px] text-neutral-400 mb-0.5">ROLL</div>
+                <div className="font-mono font-semibold flex items-baseline justify-between">
+                  <span>{telemetry.rollDeg > 0 ? `+${telemetry.rollDeg}°` : `${telemetry.rollDeg}°`}</span>
+                  <span className={`text-[10px] ${Math.abs(telemetry.rollDeg) > 18 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {Math.abs(telemetry.rollDeg) > 18 ? 'BANK' : 'NOMINAL'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Power & Odometer */}
-            <div className="flex items-center justify-between text-[11px] font-mono">
-              <div className="flex items-center gap-1.5 text-neutral-300">
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>{telemetry.batteryPct}% RTG</span>
+            {/* Battery & Odometer */}
+            <div className="flex flex-col gap-1.5 text-xs">
+              <div className="flex justify-between items-center text-neutral-300">
+                <span className="flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Battery Reserve</span>
+                </span>
+                <span className="font-mono text-white font-semibold">
+                  {telemetry.batteryPct.toFixed(0)}%
+                </span>
               </div>
-              <div className="text-neutral-400">
-                ODO: <span className="text-neutral-200">{telemetry.distanceTraveledMeters}m</span>
-              </div>
-            </div>
-
-            {/* Samples Progress */}
-            <div className="bg-neutral-800/70 p-2 rounded-lg border border-neutral-700/40">
-              <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
-                <span>SAMPLE CACHE</span>
-                <span className="text-sky-400 font-bold">{telemetry.samplesCollected} / {telemetry.totalSamples}</span>
-              </div>
-              <div className="w-full bg-neutral-700 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
                 <div
-                  className="bg-sky-500 h-full transition-all duration-300"
-                  style={{ width: `${(telemetry.samplesCollected / telemetry.totalSamples) * 100}%` }}
+                  className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                  style={{ width: `${telemetry.batteryPct}%` }}
                 />
               </div>
             </div>
 
-            {/* Interactive Rover Action Buttons */}
+            <div className="flex justify-between items-center text-xs text-neutral-400 pt-1 border-t border-neutral-700/40">
+              <span className="flex items-center gap-1">
+                <Compass className="w-3.5 h-3.5 text-neutral-400" />
+                Heading: <b className="text-neutral-200 font-mono">{telemetry.headingDeg}°</b>
+              </span>
+              <span>
+                Traveled: <b className="text-neutral-200 font-mono">{telemetry.distanceTraveledMeters.toFixed(0)}m</b>
+              </span>
+            </div>
+
+            {/* Science Targets Discovered / Collected */}
+            <div className="flex items-center justify-between text-xs bg-neutral-800/80 p-2 rounded-lg border border-neutral-700/60">
+              <span className="flex items-center gap-1.5 text-neutral-300 font-medium">
+                <Crosshair className="w-3.5 h-3.5 text-sky-400" />
+                <span>{isLunar ? 'Lunar Regolith Samples' : 'Martian Rock Samples'}</span>
+              </span>
+              <span className="font-mono font-bold text-sky-400">
+                {telemetry.samplesCollected} / {telemetry.totalSamples}
+              </span>
+            </div>
+
+            {/* Quick Interactive Tool Buttons */}
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 id="action-laser-btn"
                 onClick={onFireLaser}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg bg-sky-600/80 hover:bg-sky-600 active:scale-95 text-white text-xs font-semibold transition-all border border-sky-500/40 shadow-sm"
+                className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-red-600/25 hover:bg-red-600/40 active:bg-red-600/60 border border-red-500/50 text-red-300 text-xs font-semibold shadow-sm transition-all"
+                title={isLunar ? 'Optical Sensor Laser Pulse [L]' : 'Fire SuperCam ChemCam Laser [L]'}
               >
-                <Crosshair className="w-3.5 h-3.5" />
-                <span>SuperCam [L]</span>
+                <Zap className="w-3.5 h-3.5 text-red-400" />
+                <span>Laser Pulse [L]</span>
               </button>
 
               <button
                 id="action-drill-btn"
                 onClick={onFireDrill}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg bg-amber-600/80 hover:bg-amber-600 active:scale-95 text-white text-xs font-semibold transition-all border border-amber-500/40 shadow-sm"
+                className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-sky-600/25 hover:bg-sky-600/40 active:bg-sky-600/60 border border-sky-500/50 text-sky-300 text-xs font-semibold shadow-sm transition-all"
+                title={isLunar ? 'Geological Core Sampler [E]' : 'Activate Robotic Coring Drill [E]'}
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Drill Core [E]</span>
+                <Activity className="w-3.5 h-3.5 text-sky-400" />
+                <span>Collect Core [E]</span>
               </button>
             </div>
 
-            {/* Headlights and In-Place Pivot */}
             <div className="flex gap-2">
               <button
-                id="action-headlights-btn"
+                id="action-lights-btn"
                 onClick={() => setIsHeadlightsOn(!isHeadlightsOn)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                   isHeadlightsOn
@@ -342,7 +444,7 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                 onClick={() => setControls((c) => ({ ...c, pivotTurn: !c.pivotTurn }))}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                   controls.pivotTurn
-                    ? 'bg-orange-500/20 text-orange-300 border-orange-500/50'
+                    ? isLunar ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'bg-orange-500/20 text-orange-300 border-orange-500/50'
                     : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-neutral-200'
                 }`}
               >
@@ -353,21 +455,29 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
           </div>
         ) : (
           /* STUDIO / INSPECTION MODE (Left Side Customizer & Rig Controls) */
-          <div id="studio-inspector-panel" className="pointer-events-auto bg-neutral-900/85 backdrop-blur-md border border-neutral-700/70 rounded-xl p-4 shadow-2xl text-neutral-100 flex flex-col gap-3.5 max-w-xs">
+          <div
+            id="studio-inspector-panel"
+            className="pointer-events-auto bg-neutral-900/85 backdrop-blur-md border border-neutral-700/70 rounded-xl p-4 shadow-2xl text-neutral-100 flex flex-col gap-3.5 max-w-xs"
+          >
             <div className="flex items-center justify-between border-b border-neutral-700/60 pb-2">
               <span className="text-xs font-bold tracking-wide flex items-center gap-1.5">
-                <Sliders className="w-4 h-4 text-orange-400" />
+                <Sliders className={`w-4 h-4 ${isLunar ? 'text-sky-400' : 'text-orange-400'}`} />
                 VEHICLE CUSTOMIZER
               </span>
-              <span className="text-[10px] font-mono text-neutral-400">GAME RIG</span>
+              <span className="text-[10px] font-mono text-neutral-400">
+                {isLunar ? 'APOLLO LRV RIG' : 'PERSEVERANCE RIG'}
+              </span>
             </div>
 
             {/* Livery / Skin Selector */}
             <div>
-              <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">VEHICLE LIVERY / MATERIAL</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {(Object.keys(ROVER_SKINS) as RoverSkin[]).map((key) => {
-                  const skin = ROVER_SKINS[key];
+              <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">
+                VEHICLE LIVERY / MATERIAL
+              </label>
+              <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {(Object.keys(availableSkins) as RoverSkin[]).map((key) => {
+                  const skin = availableSkins[key];
+                  if (!skin) return null;
                   const active = currentSkin === key;
                   return (
                     <button
@@ -376,15 +486,27 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                       onClick={() => setCurrentSkin(key)}
                       className={`text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${
                         active
-                          ? 'bg-orange-500/20 border-orange-500 text-white'
+                          ? isLunar
+                            ? 'bg-sky-500/20 border-sky-500 text-white'
+                            : 'bg-orange-500/20 border-orange-500 text-white'
                           : 'bg-neutral-800/70 border-neutral-700/70 text-neutral-300 hover:bg-neutral-800'
                       }`}
                     >
-                      <div className="font-semibold text-[11px] truncate">{skin.name}</div>
-                      <div className="flex gap-1 mt-1">
-                        <span className="w-3 h-3 rounded-full border border-neutral-600" style={{ backgroundColor: `#${skin.primaryColor.toString(16).padStart(6, '0')}` }} />
-                        <span className="w-3 h-3 rounded-full border border-neutral-600" style={{ backgroundColor: `#${skin.chassisFoilColor.toString(16).padStart(6, '0')}` }} />
-                        <span className="w-3 h-3 rounded-full border border-neutral-600" style={{ backgroundColor: `#${skin.accentColor.toString(16).padStart(6, '0')}` }} />
+                      <div className="font-semibold text-[11px]">{skin.name}</div>
+                      <div className="text-[10px] text-neutral-400 line-clamp-1">{skin.description}</div>
+                      <div className="flex gap-1.5 mt-1">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-neutral-600"
+                          style={{ backgroundColor: `#${skin.primaryColor.toString(16).padStart(6, '0')}` }}
+                        />
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-neutral-600"
+                          style={{ backgroundColor: `#${skin.chassisFoilColor.toString(16).padStart(6, '0')}` }}
+                        />
+                        <span
+                          className="w-3.5 h-3.5 rounded-full border border-neutral-600"
+                          style={{ backgroundColor: `#${skin.accentColor.toString(16).padStart(6, '0')}` }}
+                        />
                       </div>
                     </button>
                   );
@@ -411,7 +533,11 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                 onChange={(e) => setExplodeProgress(parseFloat(e.target.value))}
                 className="w-full accent-sky-500 h-1.5 bg-neutral-700 rounded-lg cursor-pointer"
               />
-              <div className="text-[10px] text-neutral-400 mt-1">Isolates Chassis, Rocker-Bogie, Wheels, Mast & Arm</div>
+              <div className="text-[10px] text-neutral-400 mt-1">
+                {isLunar
+                  ? 'Isolates Tubular Chassis, Wire Wheels, Seats, Antenna & Console'
+                  : 'Isolates Chassis, Rocker-Bogie, Wheels, Mast & Arm'}
+              </div>
             </div>
 
             {/* Wireframe & Lighting */}
@@ -441,9 +567,11 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
               </button>
             </div>
 
-            {/* Robotic Arm Pose Selection */}
+            {/* Articulation / Robotic Arm Pose Selection */}
             <div>
-              <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">5-DOF ROBOTIC ARM POSE</label>
+              <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">
+                {isLunar ? 'ANTENNA & SAMPLER ARTICULATION' : '5-DOF ROBOTIC ARM POSE'}
+              </label>
               <div className="grid grid-cols-2 gap-1.5 text-xs">
                 {(['stowed', 'sample', 'scan', 'selfie'] as ArmPose[]).map((pose) => (
                   <button
@@ -471,17 +599,59 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
             <div className="hidden md:flex flex-col bg-neutral-900/85 backdrop-blur-md border border-neutral-700/60 rounded-xl p-3 text-[11px] text-neutral-300 shadow-xl min-w-[210px]">
               <span className="font-bold text-neutral-200 mb-1.5 flex items-center justify-between">
                 <span>ROVER CONTROLS</span>
-                <span className="text-[10px] text-orange-400 font-mono">WASD / ARROWS</span>
+                <span className={`text-[10px] font-mono ${isLunar ? 'text-sky-400' : 'text-orange-400'}`}>
+                  WASD / ARROWS
+                </span>
               </span>
               <div className="grid grid-cols-2 gap-y-1 gap-x-2.5 font-mono text-[10px]">
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">W / S</span> Drive</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">A / D</span> Steer</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">SPACE</span> Brake</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">SHIFT</span> Boost</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">Q</span> Pivot</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">C</span> Cycle Cam</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">1 - 4</span> Cameras</div>
-                <div><span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">E / L</span> Drill / Laser</div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    W / S
+                  </span>{' '}
+                  Drive
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    A / D
+                  </span>{' '}
+                  Steer
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    SPACE
+                  </span>{' '}
+                  Brake
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    SHIFT
+                  </span>{' '}
+                  Boost
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    Q
+                  </span>{' '}
+                  Pivot
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    C
+                  </span>{' '}
+                  Cycle Cam
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    1 - 4
+                  </span>{' '}
+                  Cameras
+                </div>
+                <div>
+                  <span className="text-white font-bold bg-neutral-800 px-1 py-0.5 rounded border border-neutral-700">
+                    E / L
+                  </span>{' '}
+                  Tool/Laser
+                </div>
               </div>
             </div>
 
@@ -489,7 +659,10 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
             <div className="bg-neutral-900/85 backdrop-blur-md border border-neutral-700/60 rounded-2xl p-2 shadow-2xl flex flex-col items-center gap-1 touch-none select-none">
               <button
                 id="touch-forward-btn"
-                onPointerDown={(e) => { e.currentTarget.blur(); setControls((c) => ({ ...c, forward: true })); }}
+                onPointerDown={(e) => {
+                  e.currentTarget.blur();
+                  setControls((c) => ({ ...c, forward: true }));
+                }}
                 onPointerUp={() => setControls((c) => ({ ...c, forward: false }))}
                 onPointerLeave={() => setControls((c) => ({ ...c, forward: false }))}
                 onPointerCancel={() => setControls((c) => ({ ...c, forward: false }))}
@@ -501,7 +674,10 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
               <div className="flex gap-1">
                 <button
                   id="touch-left-btn"
-                  onPointerDown={(e) => { e.currentTarget.blur(); setControls((c) => ({ ...c, left: true })); }}
+                  onPointerDown={(e) => {
+                    e.currentTarget.blur();
+                    setControls((c) => ({ ...c, left: true }));
+                  }}
                   onPointerUp={() => setControls((c) => ({ ...c, left: false }))}
                   onPointerLeave={() => setControls((c) => ({ ...c, left: false }))}
                   onPointerCancel={() => setControls((c) => ({ ...c, left: false }))}
@@ -512,7 +688,10 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                 </button>
                 <button
                   id="touch-brake-btn"
-                  onPointerDown={(e) => { e.currentTarget.blur(); setControls((c) => ({ ...c, handbrake: true })); }}
+                  onPointerDown={(e) => {
+                    e.currentTarget.blur();
+                    setControls((c) => ({ ...c, handbrake: true }));
+                  }}
                   onPointerUp={() => setControls((c) => ({ ...c, handbrake: false }))}
                   onPointerLeave={() => setControls((c) => ({ ...c, handbrake: false }))}
                   onPointerCancel={() => setControls((c) => ({ ...c, handbrake: false }))}
@@ -523,7 +702,10 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                 </button>
                 <button
                   id="touch-right-btn"
-                  onPointerDown={(e) => { e.currentTarget.blur(); setControls((c) => ({ ...c, right: true })); }}
+                  onPointerDown={(e) => {
+                    e.currentTarget.blur();
+                    setControls((c) => ({ ...c, right: true }));
+                  }}
                   onPointerUp={() => setControls((c) => ({ ...c, right: false }))}
                   onPointerLeave={() => setControls((c) => ({ ...c, right: false }))}
                   onPointerCancel={() => setControls((c) => ({ ...c, right: false }))}
@@ -535,12 +717,15 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
               </div>
               <button
                 id="touch-backward-btn"
-                onPointerDown={(e) => { e.currentTarget.blur(); setControls((c) => ({ ...c, backward: true })); }}
+                onPointerDown={(e) => {
+                  e.currentTarget.blur();
+                  setControls((c) => ({ ...c, backward: true }));
+                }}
                 onPointerUp={() => setControls((c) => ({ ...c, backward: false }))}
                 onPointerLeave={() => setControls((c) => ({ ...c, backward: false }))}
                 onPointerCancel={() => setControls((c) => ({ ...c, backward: false }))}
                 className="w-12 h-11 bg-neutral-800 hover:bg-neutral-700 active:bg-orange-600 rounded-lg text-white font-bold flex items-center justify-center shadow transition-all active:scale-95"
-                title="Drive Reverse [S / Down]"
+                title="Reverse [S / Down]"
               >
                 ▼
               </button>
@@ -549,39 +734,25 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
         )}
       </div>
 
-      {/* ================= BOTTOM BAR: STATS & SPECS ================= */}
-      <footer id="rover-footer-bar" className="pointer-events-auto flex flex-wrap items-center justify-between gap-2 w-full max-w-7xl mx-auto bg-neutral-900/80 backdrop-blur-md border border-neutral-700/60 rounded-xl px-3.5 py-2 shadow-xl text-neutral-300 text-xs">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="font-mono text-[11px] text-neutral-200">PHYSICS: 60 FPS</span>
-          </div>
-          <div className="hidden sm:block text-neutral-400">
-            Wheelbase: <span className="text-neutral-200 font-mono">2.7m</span> | Track: <span className="text-neutral-200 font-mono">2.2m</span>
-          </div>
-          <div className="hidden md:block text-neutral-400">
-            Kinematics: <span className="text-neutral-200 font-mono">Rocker-Bogie + 4-Wheel Steer</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-          <span>Click & Drag to Orbit • Scroll to Zoom</span>
-        </div>
-      </footer>
-
-      {/* ================= GAME EXPORT & INTEGRATION MODAL ================= */}
+      {/* ================= 3D GAME EXPORT MODAL ================= */}
       {showExportModal && (
-        <div className="pointer-events-auto fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-2xl w-full p-5 shadow-2xl text-neutral-100 flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
+        <div
+          id="export-modal-backdrop"
+          className="pointer-events-auto fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-sky-600/20 text-sky-400 border border-sky-500/30">
+                <div className="w-9 h-9 rounded-lg bg-sky-600 flex items-center justify-center text-white">
                   <Download className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">Export 3D Mars Rover for Game Engine</h3>
-                  <p className="text-xs text-neutral-400">Optimized low-draw-call hierarchy for Unity, Godot, Unreal, and WebGL</p>
+                  <h3 className="font-bold text-base text-white">
+                    Export {isLunar ? 'Apollo Lunar Rover' : 'Mars Rover'} for Game Engine
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    Optimized low-draw-call hierarchy for Unity, Godot, Unreal, and Three.js/WebGL
+                  </p>
                 </div>
               </div>
               <button
@@ -600,7 +771,8 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                     <Download className="w-4 h-4" /> GLTF / GLB Binary Model
                   </div>
                   <div className="text-xs text-neutral-400 mt-1">
-                    Complete 3D mesh with embedded PBR materials, named suspension nodes, and origin centered at wheels base.
+                    Complete 3D mesh with embedded PBR materials, named suspension nodes, and origin centered at
+                    wheels base.
                   </div>
                 </div>
                 <button
@@ -639,47 +811,44 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({
                   <Code className="w-4 h-4 text-orange-400" />
                   GAME CONTROLLER CODE TEMPLATES
                 </span>
-                <div className="flex gap-1 bg-neutral-800 rounded-lg p-0.5 border border-neutral-700 text-xs">
-                  <button
-                    onClick={() => setActiveCodeTab('unity')}
-                    className={`px-2.5 py-1 rounded font-medium transition-all ${
-                      activeCodeTab === 'unity' ? 'bg-orange-600 text-white' : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    Unity (C#)
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeTab('godot')}
-                    className={`px-2.5 py-1 rounded font-medium transition-all ${
-                      activeCodeTab === 'godot' ? 'bg-orange-600 text-white' : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    Godot 4 (GDScript)
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeTab('threejs')}
-                    className={`px-2.5 py-1 rounded font-medium transition-all ${
-                      activeCodeTab === 'threejs' ? 'bg-orange-600 text-white' : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    Three.js / WebGL
-                  </button>
+                <div className="flex gap-1 bg-neutral-800 p-1 rounded-lg">
+                  {(['unity', 'godot', 'threejs'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveCodeTab(tab)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all uppercase ${
+                        activeCodeTab === tab
+                          ? 'bg-sky-600 text-white shadow-sm'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Code Box */}
-              <div className="relative flex-1 bg-neutral-950 rounded-xl p-3 border border-neutral-800 font-mono text-xs overflow-auto text-neutral-300">
+              <div className="relative flex-1 bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden min-h-[160px]">
+                <pre className="p-3 text-[11px] font-mono text-neutral-300 overflow-auto h-full max-h-[180px]">
+                  {GAME_ENGINE_CODE_TEMPLATES[activeCodeTab]}
+                </pre>
                 <button
                   onClick={handleCopyCode}
-                  className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] border border-neutral-700 shadow"
+                  className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs shadow border border-neutral-700 transition-all"
                 >
                   {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedCode ? 'Copied!' : 'Copy Code'}</span>
                 </button>
-                <pre className="pr-16 text-[11px] leading-relaxed whitespace-pre font-mono">
-                  {GAME_ENGINE_CODE_TEMPLATES[activeCodeTab]}
-                </pre>
               </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-neutral-800 flex justify-end">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium transition-all"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

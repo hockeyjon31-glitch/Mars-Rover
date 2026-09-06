@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 
-export function exportRoverGLTF(roverRoot: THREE.Group, binary: boolean = true): Promise<void> {
+export function exportRoverGLTF(
+  roverRoot: THREE.Group,
+  binary: boolean = true,
+  filenamePrefix: string = 'SpaceRover_Vehicle'
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const exporter = new GLTFExporter();
 
@@ -18,10 +22,10 @@ export function exportRoverGLTF(roverRoot: THREE.Group, binary: boolean = true):
       (gltf) => {
         try {
           if (gltf instanceof ArrayBuffer) {
-            saveArrayBuffer(gltf, 'MarsRover_Vehicle.glb');
+            saveArrayBuffer(gltf, `${filenamePrefix}.glb`);
           } else {
             const output = JSON.stringify(gltf, null, 2);
-            saveString(output, 'MarsRover_Vehicle.gltf');
+            saveString(output, `${filenamePrefix}.gltf`);
           }
           resolve();
         } catch (err) {
@@ -39,14 +43,17 @@ export function exportRoverGLTF(roverRoot: THREE.Group, binary: boolean = true):
   });
 }
 
-export function exportRoverOBJ(roverRoot: THREE.Group): void {
+export function exportRoverOBJ(
+  roverRoot: THREE.Group,
+  filenamePrefix: string = 'SpaceRover_Vehicle'
+): void {
   const exporter = new OBJExporter();
   const clone = roverRoot.clone(true);
   clone.position.set(0, 0, 0);
   clone.rotation.set(0, 0, 0);
 
   const result = exporter.parse(clone);
-  saveString(result, 'MarsRover_Vehicle.obj');
+  saveString(result, `${filenamePrefix}.obj`);
 }
 
 function saveArrayBuffer(buffer: ArrayBuffer, filename: string) {

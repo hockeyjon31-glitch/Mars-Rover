@@ -1,16 +1,28 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { AppMode, ArmPose, CameraView, RoverGameControls, RoverTelemetry, ScienceSamplePoint } from '../types';
+import {
+  AppMode,
+  ArmPose,
+  CameraView,
+  RoverGameControls,
+  RoverSkin,
+  RoverTelemetry,
+  RoverVehicleType,
+  ScienceSamplePoint,
+} from '../types';
 import { createMartianTerrain, MartianEnvironment } from './MartianTerrain';
+import { createLunarEnvironment, PlanetaryEnvironment } from './LunarEnvironment';
 import { applyArmPose, createRoverModel, RoverNodes } from './RoverModel';
+import { createLunarRoverModel } from './LunarRoverModel';
 import { RoverPhysicsController } from './RoverPhysics';
 import { soundManager } from './SoundEffects';
 
 interface RoverStudioProps {
+  vehicleType: RoverVehicleType;
   mode: AppMode;
   cameraView: CameraView;
-  currentSkin: string;
+  currentSkin: RoverSkin;
   explodeProgress: number; // 0 to 1
   isWireframe: boolean;
   isHeadlightsOn: boolean;
@@ -25,6 +37,7 @@ interface RoverStudioProps {
 }
 
 export const RoverStudio: React.FC<RoverStudioProps> = ({
+  vehicleType,
   mode,
   cameraView,
   currentSkin,
@@ -43,6 +56,9 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
   const mountRef = useRef<HTMLDivElement>(null);
 
   // Prop reference holders to avoid stale closures in requestAnimationFrame loop
+  const vehicleTypeRef = useRef<RoverVehicleType>(vehicleType);
+  vehicleTypeRef.current = vehicleType;
+
   const controlsRef = useRef<RoverGameControls>(controls);
   controlsRef.current = controls;
 
@@ -71,13 +87,19 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
   const orbitControlsRef = useRef<OrbitControls | null>(null);
   const physicsRef = useRef<RoverPhysicsController | null>(null);
   const nodesRef = useRef<RoverNodes | null>(null);
+  const activeRoverRootRef = useRef<THREE.Group | null>(null);
   const updateSkinRef = useRef<((id: string) => void) | null>(null);
-  const martianEnvRef = useRef<MartianEnvironment | null>(null);
 
-  // Studio lighting vs Martian landscape references
+  // Environments
+  const martianEnvRef = useRef<MartianEnvironment | null>(null);
+  const lunarEnvRef = useRef<PlanetaryEnvironment | null>(null);
+  const terrainGroupRef = useRef<THREE.Group | null>(null);
+
+  // Lighting
+  const hemiLightRef = useRef<THREE.HemisphereLight | null>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
   const sunLightRef = useRef<THREE.DirectionalLight | null>(null);
   const studioGroupRef = useRef<THREE.Group | null>(null);
-  const terrainGroupRef = useRef<THREE.Group | null>(null);
 
   // Animation state refs
   const drillingStateRef = useRef<{ active: boolean; time: number }>({ active: false, time: 0 });
@@ -93,8 +115,6 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
 
     // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xd28264); // Martian dusty sky
-    scene.fog = new THREE.FogExp2(0xd28264, 0.012);
     sceneRef.current = scene;
 
     // Camera
@@ -122,14 +142,15 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
     orbit.maxPolarAngle = Math.PI / 2 - 0.02; // Don't clip under ground
     orbitControlsRef.current = orbit;
 
-    // Martian Ambient & Hemisphere Lighting
+    // Lighting
     const hemiLight = new THREE.HemisphereLight(0xffdfc4, 0x5a2617, 0.9);
     scene.add(hemiLight);
+    hemiLightRef.current = hemiLight;
 
     const ambientLight = new THREE.AmbientLight(0xd97554, 0.6);
     scene.add(ambientLight);
+    ambientLightRef.current = ambientLight;
 
-    // Sun Directional Light (Mars low solar intensity with sharp shadows)
     const sunLight = new THREE.DirectionalLight(0xfff1de, 2.2);
     sunLight.position.set(40, 60, 30);
     sunLight.castShadow = true;
@@ -178,33 +199,84 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
     ringMesh.position.y = 0.01;
     studioGroup.add(ringMesh);
 
-    // Terrain group
+    // Terrain parent group
     const terrainGroup = new THREE.Group();
-    terrainGroup.name = 'MartianTerrainGroup';
+    terrainGroup.name = 'PlanetaryTerrainGroup';
     scene.add(terrainGroup);
     terrainGroupRef.current = terrainGroup;
 
+    // Create both Mars and Lunar environments
     const martianEnv = createMartianTerrain(scene);
     martianEnvRef.current = martianEnv;
-    terrainGroup.add(martianEnv.terrainMesh);
-    terrainGroup.add(martianEnv.rocksGroup);
-    terrainGroup.add(martianEnv.samplesGroup);
 
-    // Create Rover Model
-    const { rover, nodes, updateSkin } = createRoverModel(currentSkin);
-    scene.add(rover);
-    nodesRef.current = nodes;
-    updateSkinRef.current = updateSkin;
+    const lunarEnv = createLunarEnvironment(scene);
+    lunarEnvRef.current = lunarEnv;
+
+    // Initially configure based on vehicleType
+    const isLunar = vehicleTypeRef.current === 'lunar_lrv';
+    martianEnv.terrainMesh.visible = !isLunar;
+    martianEnv.rocksGroup.visible = !isLunar;
+    martianEnv.samplesGroup.visible = !isLunar;
+
+    lunarEnv.terrainMesh.visible = isLunar;
+    lunarEnv.rocksGroup.visible = isLunar;
+    lunarEnv.samplesGroup.visible = isLunar;
+    if (lunarEnv.groundFeatureGroup) lunarEnv.groundFeatureGroup.visible = isLunar;
+
+    const activeHeightFunc = isLunar ? lunarEnv.getTerrainHeight : martianEnv.getTerrainHeight;
+
+    // Create initial rover model
+    const initialModel = isLunar
+      ? createLunarRoverModel(currentSkin)
+      : createRoverModel(currentSkin);
+
+    scene.add(initialModel.rover);
+    activeRoverRootRef.current = initialModel.rover;
+    nodesRef.current = initialModel.nodes;
+    updateSkinRef.current = initialModel.updateSkin;
 
     if (roverRefOutput) {
-      roverRefOutput.current = rover;
+      roverRefOutput.current = initialModel.rover;
     }
 
     // Physics Controller
-    const physics = new RoverPhysicsController(nodes, scene, martianEnv.getTerrainHeight);
+    const physics = new RoverPhysicsController(initialModel.nodes, scene, activeHeightFunc);
     physicsRef.current = physics;
+    if (isLunar) {
+      physics.setDustColor(0x8a9099); // Ash-grey lunar regolith dust
+    } else {
+      physics.setDustColor(0xcd6945); // Iron-oxide reddish dust
+    }
 
-    // Resize handler with ResizeObserver
+    // Apply sky and environment settings
+    if (modeRef.current === 'studio') {
+      scene.background = new THREE.Color(0x13151b);
+      scene.fog = new THREE.FogExp2(0x13151b, 0.025);
+      studioGroup.visible = true;
+      terrainGroup.visible = false;
+    } else {
+      studioGroup.visible = false;
+      terrainGroup.visible = true;
+      if (isLunar) {
+        scene.background = lunarEnv.skyColor;
+        scene.fog = new THREE.FogExp2(lunarEnv.fogColor.getHex(), lunarEnv.fogDensity);
+        hemiLight.color.setHex(0xd0d5e0);
+        hemiLight.groundColor.setHex(0x22242a);
+        ambientLight.color.setHex(0x555a66);
+        sunLight.color.setHex(0xffffff);
+        sunLight.intensity = 3.2;
+      } else {
+        scene.background = new THREE.Color(0xd28264);
+        scene.fog = new THREE.FogExp2(0xd28264, 0.012);
+        hemiLight.color.setHex(0xffdfc4);
+        hemiLight.groundColor.setHex(0x5a2617);
+        ambientLight.color.setHex(0xd97554);
+        sunLight.color.setHex(0xfff1de);
+        sunLight.intensity = 2.2;
+      }
+    }
+
+    // Resize handler
     const handleResize = () => {
       if (!mountRef.current || !rendererRef.current || !cameraRef.current) return;
       const w = mountRef.current.clientWidth;
@@ -217,7 +289,7 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
 
-    // Expose Actions for Laser and Drill
+    // Actions
     triggerLaserRef &&
       (triggerLaserRef.current = () => {
         laserStateRef.current = { active: true, time: 0.4 };
@@ -229,10 +301,10 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
         drillingStateRef.current = { active: true, time: 2.2 };
         soundManager.playDrillSound();
 
-        // Check if close to any science target
-        if (physicsRef.current && martianEnvRef.current) {
+        const activeEnv = vehicleTypeRef.current === 'lunar_lrv' ? lunarEnvRef.current : martianEnvRef.current;
+        if (physicsRef.current && activeEnv) {
           const rPos = physicsRef.current.position;
-          martianEnvRef.current.samplePoints.forEach((sample) => {
+          activeEnv.samplePoints.forEach((sample) => {
             const dx = rPos.x - sample.position[0];
             const dz = rPos.z - sample.position[2];
             const dist = Math.sqrt(dx * dx + dz * dz);
@@ -247,7 +319,7 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
         }
       });
 
-    // Start Web Audio motor sound on first user touch/click
+    // Sound interaction
     const handleFirstInteraction = () => {
       soundManager.startMotorSound();
       window.removeEventListener('pointerdown', handleFirstInteraction);
@@ -265,7 +337,6 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
       const delta = Math.min((time - lastTime) / 1000, 0.1);
       lastTime = time;
 
-      // Update Physics & Telemetry
       if (physicsRef.current && nodesRef.current) {
         const isStudio = modeRef.current === 'studio';
         const currentControls = controlsRef.current;
@@ -273,10 +344,9 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
 
         const telemetry = physicsRef.current.update(delta, currentControls, isStudio);
 
-        // Sound sync
         soundManager.updateMotorSpeed(telemetry.speedMs);
 
-        // Sun light follows rover position in drive mode
+        // Sun light tracking
         if (sunLightRef.current && !isStudio) {
           sunLightRef.current.position.set(
             physicsRef.current.position.x + 35,
@@ -287,12 +357,13 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
           sunLightRef.current.target.updateMatrixWorld();
         }
 
-        // Check proximity to science waypoints
-        if (!isStudio && martianEnvRef.current) {
+        // Check science targets
+        const activeEnv = vehicleTypeRef.current === 'lunar_lrv' ? lunarEnvRef.current : martianEnvRef.current;
+        if (!isStudio && activeEnv) {
           let foundNearby: ScienceSamplePoint | null = null;
           const rPos = physicsRef.current.position;
 
-          martianEnvRef.current.samplePoints.forEach((sample) => {
+          activeEnv.samplePoints.forEach((sample) => {
             const dx = rPos.x - sample.position[0];
             const dz = rPos.z - sample.position[2];
             const dist = Math.sqrt(dx * dx + dz * dz);
@@ -309,8 +380,7 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
 
           nearbySampleRef.current = foundNearby;
 
-          // Rotate beacons
-          martianEnvRef.current.sampleMarkers.forEach((item) => {
+          activeEnv.sampleMarkers.forEach((item) => {
             const beacon = item.marker.getObjectByName('BeaconMesh');
             if (beacon) beacon.rotation.y += delta * 1.5;
           });
@@ -338,18 +408,16 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
 
         // Camera Management
         if (cameraRef.current && orbitControlsRef.current) {
+          const roverPos = physicsRef.current.position;
+          const roverYaw = physicsRef.current.yaw;
+
           if (isStudio) {
             orbitControlsRef.current.enabled = true;
             orbitControlsRef.current.target.set(0, 0.8, 0);
             orbitControlsRef.current.update();
           } else {
-            // Drive mode camera perspectives
-            const roverPos = physicsRef.current.position;
-            const roverYaw = physicsRef.current.yaw;
-
             if (currentCamView === 'chase') {
               orbitControlsRef.current.enabled = false;
-              // Smooth spring follow behind rover
               const camDist = 7.2;
               const camHeight = 3.4;
               const targetCamPos = new THREE.Vector3(
@@ -357,13 +425,10 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
                 roverPos.y + camHeight,
                 roverPos.z - Math.cos(roverYaw) * camDist
               );
-
               cameraRef.current.position.lerp(targetCamPos, 0.12);
-              const lookTarget = new THREE.Vector3(roverPos.x, roverPos.y + 1.1, roverPos.z);
-              cameraRef.current.lookAt(lookTarget);
+              cameraRef.current.lookAt(new THREE.Vector3(roverPos.x, roverPos.y + 1.1, roverPos.z));
             } else if (currentCamView === 'cockpit') {
               orbitControlsRef.current.enabled = false;
-              // MastCam FPV POV - position slightly in front of head enclosure to prevent clipping
               const mastWorld = new THREE.Vector3();
               nodesRef.current.mastHead.getWorldPosition(mastWorld);
               const forward = new THREE.Vector3(Math.sin(roverYaw), -0.06, Math.cos(roverYaw));
@@ -371,7 +436,6 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
               cameraRef.current.lookAt(mastWorld.clone().add(forward.multiplyScalar(20)));
             } else if (currentCamView === 'wheel') {
               orbitControlsRef.current.enabled = false;
-              // Low angle wheel rocker-bogie view
               const wheelWorld = new THREE.Vector3();
               nodesRef.current.wheels[0].getWorldPosition(wheelWorld);
               cameraRef.current.position.set(
@@ -381,7 +445,6 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
               );
               cameraRef.current.lookAt(wheelWorld);
             } else {
-              // Free orbit around rover
               orbitControlsRef.current.enabled = true;
               orbitControlsRef.current.target.lerp(
                 new THREE.Vector3(roverPos.x, roverPos.y + 0.8, roverPos.z),
@@ -392,11 +455,8 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
           }
         }
 
-        // Send telemetry back to UI
-        const collectedCount = martianEnvRef.current
-          ? martianEnvRef.current.samplePoints.filter((s) => s.collected).length
-          : 0;
-
+        // Send telemetry back
+        const collectedCount = activeEnv ? activeEnv.samplePoints.filter((s) => s.collected).length : 0;
         telemetry.samplesCollected = collectedCount;
         telemetry.isHeadlightsOn = isHeadlightsOnRef.current;
         telemetry.isDrilling = drillingStateRef.current.active;
@@ -410,7 +470,6 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
 
     animationFrameId = requestAnimationFrame(animate);
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(animationFrameId);
       resizeObserver.disconnect();
@@ -423,50 +482,83 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
     };
   }, []);
 
-  // Responsive Camera View Switching Effect
+  // 2. Switch Vehicle Type (Apollo Lunar Rover vs Mars Perseverance)
   useEffect(() => {
-    if (!cameraRef.current || !physicsRef.current || mode === 'studio') return;
-    const roverPos = physicsRef.current.position;
-    const roverYaw = physicsRef.current.yaw;
+    if (!sceneRef.current || !physicsRef.current) return;
+    const isLunar = vehicleType === 'lunar_lrv';
 
-    if (cameraView === 'free' && orbitControlsRef.current) {
-      orbitControlsRef.current.enabled = true;
-      orbitControlsRef.current.target.set(roverPos.x, roverPos.y + 0.8, roverPos.z);
-      cameraRef.current.position.set(
-        roverPos.x - Math.sin(roverYaw + 0.5) * 6.5,
-        roverPos.y + 3.0,
-        roverPos.z - Math.cos(roverYaw + 0.5) * 6.5
-      );
-      orbitControlsRef.current.update();
-    } else if (cameraView === 'chase' && orbitControlsRef.current) {
-      orbitControlsRef.current.enabled = false;
-      const camDist = 7.2;
-      const camHeight = 3.4;
-      cameraRef.current.position.set(
-        roverPos.x - Math.sin(roverYaw) * camDist,
-        roverPos.y + camHeight,
-        roverPos.z - Math.cos(roverYaw) * camDist
-      );
-      cameraRef.current.lookAt(new THREE.Vector3(roverPos.x, roverPos.y + 1.1, roverPos.z));
-    } else if (cameraView === 'cockpit' && orbitControlsRef.current && nodesRef.current) {
-      orbitControlsRef.current.enabled = false;
-      const mastWorld = new THREE.Vector3();
-      nodesRef.current.mastHead.getWorldPosition(mastWorld);
-      const forward = new THREE.Vector3(Math.sin(roverYaw), -0.06, Math.cos(roverYaw));
-      cameraRef.current.position.copy(mastWorld).addScaledVector(forward, 0.22);
-      cameraRef.current.lookAt(mastWorld.clone().add(forward.multiplyScalar(20)));
-    } else if (cameraView === 'wheel' && orbitControlsRef.current && nodesRef.current) {
-      orbitControlsRef.current.enabled = false;
-      const wheelWorld = new THREE.Vector3();
-      nodesRef.current.wheels[0].getWorldPosition(wheelWorld);
-      cameraRef.current.position.set(
-        wheelWorld.x - Math.sin(roverYaw - 0.4) * 2.2,
-        wheelWorld.y + 0.35,
-        wheelWorld.z - Math.cos(roverYaw - 0.4) * 2.2
-      );
-      cameraRef.current.lookAt(wheelWorld);
+    // Remove old rover mesh
+    if (activeRoverRootRef.current) {
+      sceneRef.current.remove(activeRoverRootRef.current);
     }
-  }, [cameraView, mode]);
+
+    // Toggle planetary terrain visibility
+    if (martianEnvRef.current) {
+      martianEnvRef.current.terrainMesh.visible = !isLunar;
+      martianEnvRef.current.rocksGroup.visible = !isLunar;
+      martianEnvRef.current.samplesGroup.visible = !isLunar;
+    }
+    if (lunarEnvRef.current) {
+      lunarEnvRef.current.terrainMesh.visible = isLunar;
+      lunarEnvRef.current.rocksGroup.visible = isLunar;
+      lunarEnvRef.current.samplesGroup.visible = isLunar;
+      if (lunarEnvRef.current.groundFeatureGroup) {
+        lunarEnvRef.current.groundFeatureGroup.visible = isLunar;
+      }
+    }
+
+    const activeEnv = isLunar ? lunarEnvRef.current : martianEnvRef.current;
+    const activeHeight = activeEnv ? activeEnv.getTerrainHeight : () => 0;
+
+    // Build new rover model
+    const newModel = isLunar
+      ? createLunarRoverModel(currentSkin)
+      : createRoverModel(currentSkin);
+
+    sceneRef.current.add(newModel.rover);
+    activeRoverRootRef.current = newModel.rover;
+    nodesRef.current = newModel.nodes;
+    updateSkinRef.current = newModel.updateSkin;
+
+    if (roverRefOutput) {
+      roverRefOutput.current = newModel.rover;
+    }
+
+    physicsRef.current.updateNodesAndTerrain(newModel.nodes, activeHeight);
+    physicsRef.current.setDustColor(isLunar ? 0x8a9099 : 0xcd6945);
+
+    // Update Lighting & Atmosphere if in Drive Mode
+    if (mode === 'drive') {
+      if (isLunar && lunarEnvRef.current) {
+        sceneRef.current.background = lunarEnvRef.current.skyColor;
+        sceneRef.current.fog = new THREE.FogExp2(
+          lunarEnvRef.current.fogColor.getHex(),
+          lunarEnvRef.current.fogDensity
+        );
+        if (hemiLightRef.current) {
+          hemiLightRef.current.color.setHex(0xd0d5e0);
+          hemiLightRef.current.groundColor.setHex(0x22242a);
+        }
+        if (ambientLightRef.current) ambientLightRef.current.color.setHex(0x555a66);
+        if (sunLightRef.current) {
+          sunLightRef.current.color.setHex(0xffffff);
+          sunLightRef.current.intensity = 3.2;
+        }
+      } else {
+        sceneRef.current.background = new THREE.Color(0xd28264);
+        sceneRef.current.fog = new THREE.FogExp2(0xd28264, 0.012);
+        if (hemiLightRef.current) {
+          hemiLightRef.current.color.setHex(0xffdfc4);
+          hemiLightRef.current.groundColor.setHex(0x5a2617);
+        }
+        if (ambientLightRef.current) ambientLightRef.current.color.setHex(0xd97554);
+        if (sunLightRef.current) {
+          sunLightRef.current.color.setHex(0xfff1de);
+          sunLightRef.current.intensity = 2.2;
+        }
+      }
+    }
+  }, [vehicleType]);
 
   // Update Skin
   useEffect(() => {
@@ -481,8 +573,10 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
     nodesRef.current.root.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         if (Array.isArray(child.material)) {
-          child.material.forEach((m) => (m.wireframe = isWireframe));
-        } else {
+          child.material.forEach((m) => {
+            if ('wireframe' in m) m.wireframe = isWireframe;
+          });
+        } else if ('wireframe' in child.material) {
           child.material.wireframe = isWireframe;
         }
       }
@@ -514,6 +608,7 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
   useEffect(() => {
     if (!sceneRef.current || !studioGroupRef.current || !terrainGroupRef.current) return;
     const isStudio = mode === 'studio';
+    const isLunar = vehicleType === 'lunar_lrv';
 
     studioGroupRef.current.visible = isStudio;
     terrainGroupRef.current.visible = !isStudio;
@@ -522,10 +617,18 @@ export const RoverStudio: React.FC<RoverStudioProps> = ({
       sceneRef.current.background = new THREE.Color(0x13151b);
       sceneRef.current.fog = new THREE.FogExp2(0x13151b, 0.025);
     } else {
-      sceneRef.current.background = new THREE.Color(0xd28264);
-      sceneRef.current.fog = new THREE.FogExp2(0xd28264, 0.012);
+      if (isLunar && lunarEnvRef.current) {
+        sceneRef.current.background = lunarEnvRef.current.skyColor;
+        sceneRef.current.fog = new THREE.FogExp2(
+          lunarEnvRef.current.fogColor.getHex(),
+          lunarEnvRef.current.fogDensity
+        );
+      } else {
+        sceneRef.current.background = new THREE.Color(0xd28264);
+        sceneRef.current.fog = new THREE.FogExp2(0xd28264, 0.012);
+      }
     }
-  }, [mode]);
+  }, [mode, vehicleType]);
 
   // Update Explode View Progress
   useEffect(() => {

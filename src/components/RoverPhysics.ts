@@ -68,6 +68,20 @@ export class RoverPhysicsController {
     scene.add(this.dustParticles);
   }
 
+  public setDustColor(hexColor: number) {
+    if (this.dustParticles.material instanceof THREE.PointsMaterial) {
+      this.dustParticles.material.color.setHex(hexColor);
+    }
+  }
+
+  public updateNodesAndTerrain(nodes: RoverNodes, getTerrainHeight: (x: number, z: number) => number) {
+    this.nodes = nodes;
+    this.getTerrainHeight = getTerrainHeight;
+    const initY = getTerrainHeight(this.position.x, this.position.z);
+    this.position.y = initY + 0.55;
+    this.nodes.root.position.copy(this.position);
+  }
+
   public update(
     delta: number,
     controls: RoverGameControls,

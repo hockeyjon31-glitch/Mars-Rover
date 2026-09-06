@@ -7,15 +7,17 @@ import {
   RoverGameControls,
   RoverSkin,
   RoverTelemetry,
+  RoverVehicleType,
   ScienceSamplePoint,
 } from './types';
 import { RoverStudio } from './components/RoverStudio';
 import { UIOverlay } from './components/UIOverlay';
 
 export default function App() {
+  const [vehicleType, setVehicleType] = useState<RoverVehicleType>('lunar_lrv');
   const [mode, setMode] = useState<AppMode>('drive');
   const [cameraView, setCameraView] = useState<CameraView>('chase');
-  const [currentSkin, setCurrentSkin] = useState<RoverSkin>('nasa_classic');
+  const [currentSkin, setCurrentSkin] = useState<RoverSkin>('apollo_historic');
   const [explodeProgress, setExplodeProgress] = useState<number>(0);
   const [isWireframe, setIsWireframe] = useState<boolean>(false);
   const [isHeadlightsOn, setIsHeadlightsOn] = useState<boolean>(true);
@@ -67,7 +69,10 @@ export default function App() {
       const key = e.key ? e.key.toLowerCase() : '';
 
       // Prevent window scrolling on arrow keys or space bar
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code) || [' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      if (
+        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code) ||
+        [' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)
+      ) {
         e.preventDefault();
       }
 
@@ -184,6 +189,7 @@ export default function App() {
     <main className="relative w-screen h-screen overflow-hidden bg-neutral-950 font-sans">
       {/* 3D WebGL Canvas */}
       <RoverStudio
+        vehicleType={vehicleType}
         mode={mode}
         cameraView={cameraView}
         currentSkin={currentSkin}
@@ -200,8 +206,10 @@ export default function App() {
         triggerDrillRef={triggerDrillRef}
       />
 
-      {/* Sci-Fi NASA Telemetry & Game Dev HUD */}
+      {/* Sci-Fi NASA / Apollo Telemetry & Game Dev HUD */}
       <UIOverlay
+        vehicleType={vehicleType}
+        setVehicleType={setVehicleType}
         mode={mode}
         setMode={setMode}
         cameraView={cameraView}
