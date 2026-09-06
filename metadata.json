@@ -1,0 +1,6 @@
+{
+  "name": "Mars Rover 3D",
+  "description": "Interactive 3D Mars rover vehicle with articulated rocker-bogie physics, inspection mode, drive simulation, and 3D export for game development.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

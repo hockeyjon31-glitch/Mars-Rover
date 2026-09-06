@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mars Rover 3D</title>
+    <meta name="description" content="Interactive 3D Mars rover vehicle with articulated rocker-bogie physics, inspection mode, drive simulation, and 3D export for game development." />
+    <meta property="og:title" content="Mars Rover 3D" />
+    <meta property="og:description" content="Interactive 3D Mars rover vehicle with articulated rocker-bogie physics, inspection mode, drive simulation, and 3D export for game development." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Ensure window.fetch has both getter and setter to prevent "Cannot set property fetch of #<Window> which has only a getter"
+      (function () {
+        try {
+          var root = typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : null;
+          if (root) {
+            var activeFetch = typeof root.fetch === 'function' ? root.fetch.bind(root) : root.fetch;
+            Object.defineProperty(root, 'fetch', {
+              get: function () {
+                return activeFetch;
+              },
+              set: function (fn) {
+                activeFetch = fn;
+              },
+              configurable: true,
+              enumerable: true,
+            });
+            if (typeof Window !== 'undefined' && Window.prototype) {
+              try {
+                Object.defineProperty(Window.prototype, 'fetch', {
+                  get: function () {
+                    return activeFetch;
+                  },
+                  set: function (fn) {
+                    activeFetch = fn;
+                  },
+                  configurable: true,
+                  enumerable: true,
+                });
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
